@@ -1,0 +1,8 @@
+km_inicio,km_fin,modo_falla,estacionalidad,severidad_declarada,fuente,observacion
+0,20,arrastre_material,noviembre-marzo,alta,informante_campo,Puede extenderse mas alla de marzo
+0,20,baja_visibilidad_polvo,todo_el_ano,media,informante_campo,Asociado a episodios de viento
+20,25,derrumbe,no_declarada,alta,informante_campo,
+25,35,acumulacion_barro,lluvia,alta,informante_campo,Debido al material del camino
+25,35,derrape,lluvia,alta,informante_campo,
+110,140,nieve,invierno,alta,observacion_fotografica,Observado 2026-08-15. Despeje con maquinaria
+140,220,nieve,invierno,alta,informante_campo,Intransitable. Fuera de alcance del estudio

@@ -1,0 +1,64 @@
+# Configuracion del corredor de estudio
+# PRINCIPIO: ningun nombre de corredor va hardcodeado en el codigo.
+# Para aplicar el sistema a otro corredor, se crea otro archivo como este.
+
+corredor:
+  id: vicuna_este
+  nombre: "Corredor de acceso este - Proyecto Vicuna"
+  provincia_inicio: "La Rioja"
+  provincia_fin: "San Juan"
+  localidad_inicio: "Guandacol"
+
+  # Alcance del estudio
+  progresiva_inicio_km: 0
+  progresiva_fin_km: 140
+  longitud_total_declarada_km: 220
+  fuera_de_alcance:
+    desde_km: 140
+    hasta_km: 220
+    motivo: "Sin acceso verificable. Tramo operado por tercero. Intransitable por nieve en invierno."
+
+  # Segmentacion
+  paso_segmentacion_km: 1
+
+  # Sistema de referencia
+  crs_geografico: "EPSG:4326"
+  crs_proyectado: "EPSG:32719"   # UTM 19S - verificar zona antes de usar
+
+  # Caja de descarga para rasters (lat/lon)
+  bbox:
+    lat_min: -29.60
+    lat_max: -28.65
+    lon_min: -69.15
+    lon_max: -68.50
+
+fuentes:
+  clima:
+    proveedor: open-meteo
+    dataset: era5
+    variables: [temperature_2m, precipitation, snowfall, wind_speed_10m, wind_gusts_10m]
+    desde: "2000-01-01"
+    resolucion_temporal: horaria
+    correccion_altitud:
+      aplicar: true
+      gradiente_termico_c_por_1000m: 6.5
+
+  elevacion:
+    proveedor: ign_ar
+    producto: MDE-Ar
+    resolucion_m: 30
+
+  satelital:
+    proveedor: copernicus_dataspace
+    coleccion: SENTINEL-2
+    nivel: L2A
+    cobertura_nubes_max_pct: 30
+
+validacion:
+  eventos_observados:
+    - fecha: "2026-08-15"
+      tipo: nieve
+      km_desde: 110
+      km_hasta: 140
+      evidencia: fotografia_georreferenciada
+      observacion: "Camino despejado con maquinaria. Km 140-200 intransitable."

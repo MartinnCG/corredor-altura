@@ -1,0 +1,5 @@
+km_inicio,km_fin,nombre_operativo,fuente
+0,20,Ingreso,informante_campo
+20,26,La Troya,informante_campo
+26,32,La Junta,informante_campo
+32,40,El Zapallar,informante_campo

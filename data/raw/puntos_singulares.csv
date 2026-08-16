@@ -1,0 +1,13 @@
+tipo,nombre,progresiva_km,lat,lon,fuente,observacion
+garita,Garita Guandacol,0,-29.510023,-68.579633,foto_gps_campo,Entrada al proyecto
+cargadero,Cargadero El Canal,,-29.498860,-68.583625,foto_gps_campo,Cargadero de agua para camiones regadores
+cruce_rio,Rio Janson,,,,informante_campo,Entre km 0 y 20. Coordenada pendiente
+cruce_rio,La Flecha,,,,informante_campo,Entre km 0 y 20. Coordenada pendiente
+cargadero,Cargadero La Flecha,,,,informante_campo,Entre km 0 y 20. Coordenada pendiente
+division_camino,Division livianos-pesados,23,,,informante_campo,Separacion de flujo por tipo de equipo
+cruce_rio,La Troya,,,,informante_campo,Entre km 20 y 35. Coordenada pendiente
+cargadero,Cargadero Rio La Troya,,,,informante_campo,Cargadero de riego
+cruce_rio,La Junta,,-29.322084,-68.647264,foto_gps_campo,Cartel La Junta - reporte su ubicacion
+campamento,Campamento El Zapallar,,,,informante_campo,Entre km 32 y 40
+paso,Paso del Leoncito,115,-28.775108,-68.941892,google_earth,Maximo local de elevacion 3985 m
+salina,Salinas del Leoncito,125,-28.731242,-68.993339,google_earth,Cuenca endorreica 3655 m
