@@ -1,9 +1,19 @@
 progresiva_km,lat,lon,confianza,fuente,fecha_relevamiento,observacion
-0,-29.509447,-68.580241,alta,foto_gps_campo,2026-08-09,Cartel Vicuna 0. Garita Guandacol. Senal 20 km/h
-20,-29.363569,-68.600198,media,foto_gps_campo,2026-08-09,Cartel LA TROYA. Inicio de tramo segun nomenclatura operativa
+0,-29.509447,-68.580241,alta,foto_gps_campo,2026-08-09,Cartel Vicuna 0. Garita Portal Guandacol. Senal 20 km/h
+20,-29.363569,-68.600198,media,foto_gps_campo,2026-08-09,Cartel LA TROYA. Inicio de tramo por nomenclatura operativa
 25,-29.353295,-68.624173,alta,foto_gps_campo,2026-08-09,Cartel Vicuna 25
-32,-29.318633,-68.648438,media,foto_gps_campo,2026-08-09,Cartel EL ZAPALLAR. Inicio de tramo segun nomenclatura operativa
+32,-29.318633,-68.648438,media,foto_gps_campo,2026-08-09,Cartel EL ZAPALLAR. Inicio de tramo por nomenclatura operativa
 35,-29.299389,-68.681724,alta,foto_gps_campo,2026-08-09,Cartel Vicuna 35
-110,-28.778325,-68.928258,alta,foto_gps_campo,2026-08-15,Cartel Vicuna 110. Nieve. Camino despejado con maquinaria
+40,-29.276974,-68.723049,alta,foto_gps_campo,2026-08-16,Cartel Vicuna 40
+45,-29.237724,-68.722626,alta,foto_gps_campo,2026-08-16,Cartel Vicuna 45
+50,-29.205895,-68.704027,alta,foto_gps_campo,2026-08-16,Cartel Vicuna 50
+55,-29.168768,-68.720492,alta,foto_gps_campo,2026-08-16,Cartel Vicuna 55
+60,-29.131032,-68.742475,alta,foto_gps_campo,2026-08-16,Cartel Vicuna 60. Maquinaria vial en obra
+70,-29.051264,-68.780945,alta,foto_gps_campo,2026-08-16,Cartel Vicuna 70
+80,-28.965404,-68.775077,alta,foto_gps_campo,2026-08-16,Cartel Vicuna 80
+85,-28.921125,-68.785039,alta,foto_gps_campo,2026-08-16,Cartel Vicuna 85
+90,-28.879229,-68.788979,alta,foto_gps_campo,2026-08-16,Cartel Vicuna 90
+95,-28.841460,-68.818889,alta,foto_gps_campo,2026-08-16,Cartel Vicuna 95
+110,-28.778325,-68.928258,alta,foto_gps_campo,2026-08-15,Cartel Vicuna 110. Nieve. Despeje con maquinaria
 115,-28.770381,-68.939780,alta,foto_gps_campo,2026-08-15,Cartel Vicuna 115. Nieve
 130,-28.747720,-69.049507,alta,foto_gps_campo,2026-08-15,Cartel Vicuna 130. Nieve
