@@ -1,27 +1,33 @@
-"""Calibra la progresiva de la traza contra los carteles de kilometraje
-y genera la tabla maestra de segmentos de 1 km.
+"""Genera segmentos de 1 km sobre la traza validada.
 
-La longitud recorrida sobre la traza no coincide con la progresiva
-senalizada: la traza sigue cada curva mientras el cartel mide sobre el
-eje de proyecto. Se corrige interpolando linealmente entre puntos de
-control, de modo que el km N del sistema sea el km N del cartel.
+Criterio de calibracion:
+- Usa como anclas duras SOLO puntos_control con confianza == "alta".
+- Los puntos de confianza media (por ejemplo referencias operativas) se
+  conservan en el CSV original, pero NO deforman la progresiva kilometraje.
+- Interpola linealmente entre anclas de alta confianza.
 """
 
-import csv, json, math
+import csv
+import json
+import math
 from pathlib import Path
 
-from shapely.geometry import LineString, Point, mapping
+from shapely.geometry import Point, LineString, mapping
 
 RAIZ = Path(__file__).resolve().parents[2]
-TRAZA = json.load(open(RAIZ / "data" / "raw" / "traza_corredor.geojson", encoding="utf-8"))
-PC = list(csv.DictReader(open(RAIZ / "data" / "raw" / "puntos_control.csv", encoding="utf-8")))
-OUT_SEG = RAIZ / "data" / "processed" / "segmentos.csv"
-OUT_GEO = RAIZ / "data" / "processed" / "segmentos.geojson"
+
+TRAZA_FILE = RAIZ / "data" / "raw" / "traza_corredor.geojson"
+PC_FILE = RAIZ / "data" / "raw" / "puntos_control.csv"
+
+OUT_CSV = RAIZ / "data" / "processed" / "segmentos.csv"
+OUT_GEOJSON = RAIZ / "data" / "processed" / "segmentos.geojson"
 
 LAT_REF = -29.1
 MX = 111320 * math.cos(math.radians(LAT_REF))
 MY = 110540
-PASO_KM = 1.0
+
+PASO_SEGMENTO_KM = 1.0
+MUESTREO_M = 100.0
 
 
 def xy(lon, lat):
@@ -32,123 +38,225 @@ def lonlat(x, y):
     return x / MX, y / MY
 
 
-coords_ll = TRAZA["geometry"]["coordinates"]
-traza = LineString([xy(x, y) for x, y in coords_ll])
+def cargar_traza():
+    with open(TRAZA_FILE, encoding="utf-8") as f:
+        gj = json.load(f)
 
-# --- tabla de calibracion: s recorrido sobre traza <-> km senalizado ---
-PC.sort(key=lambda r: float(r["progresiva_km"]))
-cal = []
-for r in PC:
-    p = Point(*xy(float(r["lon"]), float(r["lat"])))
-    cal.append((traza.project(p) / 1000, float(r["progresiva_km"])))
+    # Admite Feature o FeatureCollection
+    if gj.get("type") == "Feature":
+        geom = gj["geometry"]
+    elif gj.get("type") == "FeatureCollection":
+        if not gj.get("features"):
+            raise SystemExit("ERROR: traza_corredor.geojson no contiene features.")
+        geom = gj["features"][0]["geometry"]
+    else:
+        raise SystemExit("ERROR: formato GeoJSON de traza no reconocido.")
 
-# monotonia: descartar anclas que rompan el orden
-limpio = [cal[0]]
-for s, km in cal[1:]:
-    if s > limpio[-1][0] and km > limpio[-1][1]:
-        limpio.append((s, km))
-descartadas = len(cal) - len(limpio)
-cal = limpio
+    if geom.get("type") != "LineString":
+        raise SystemExit("ERROR: la traza debe ser LineString.")
 
-print("Calibracion progresiva\n")
-print(f"{'km cartel':>10} {'s traza':>10} {'factor':>9}")
+    coords_ll = geom["coordinates"]
+    coords_xy = [xy(lon, lat) for lon, lat in coords_ll]
+    return LineString(coords_xy)
+
+
+def cargar_puntos_control():
+    with open(PC_FILE, encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+
+    for r in rows:
+        r["progresiva_km"] = float(r["progresiva_km"])
+        r["lat"] = float(r["lat"])
+        r["lon"] = float(r["lon"])
+        r["confianza"] = (r.get("confianza") or "").strip().lower()
+
+    rows.sort(key=lambda r: r["progresiva_km"])
+    return rows
+
+
+def construir_anclas(traza, puntos):
+    anclas = []
+
+    for r in puntos:
+        if r["confianza"] != "alta":
+            continue
+
+        p = Point(*xy(r["lon"], r["lat"]))
+        s_km = traza.project(p) / 1000.0
+        lateral_m = traza.distance(p)
+
+        anclas.append({
+            "km": r["progresiva_km"],
+            "s_km": s_km,
+            "lateral_m": lateral_m,
+            "observacion": r.get("observacion", ""),
+        })
+
+    if len(anclas) < 2:
+        raise SystemExit("ERROR: se necesitan al menos dos puntos de confianza alta.")
+
+    # Comprobar monotonicidad de s respecto a km
+    for a, b in zip(anclas, anclas[1:]):
+        if b["s_km"] <= a["s_km"]:
+            raise SystemExit(
+                f"ERROR: anclas no monotonicas entre km {a['km']:.0f} y {b['km']:.0f}."
+            )
+
+    return anclas
+
+
+def km_a_s(km, anclas):
+    """Convierte progresiva oficial km -> distancia sobre traza en km."""
+
+    if km < anclas[0]["km"] or km > anclas[-1]["km"]:
+        raise ValueError(
+            f"km {km} fuera del rango calibrado "
+            f"{anclas[0]['km']}..{anclas[-1]['km']}"
+        )
+
+    for a, b in zip(anclas, anclas[1:]):
+        if a["km"] <= km <= b["km"]:
+            if b["km"] == a["km"]:
+                return a["s_km"]
+
+            t = (km - a["km"]) / (b["km"] - a["km"])
+            return a["s_km"] + t * (b["s_km"] - a["s_km"])
+
+    # Solo por seguridad numerica
+    return anclas[-1]["s_km"]
+
+
+def extraer_sublinea(traza, s0_m, s1_m, paso_m=100.0):
+    """Extrae una LineString entre dos distancias de la traza por muestreo."""
+
+    if s1_m <= s0_m:
+        raise ValueError("s1 debe ser mayor que s0.")
+
+    coords = []
+    s = s0_m
+
+    while s < s1_m:
+        p = traza.interpolate(s)
+        coords.append((p.x, p.y))
+        s += paso_m
+
+    p = traza.interpolate(s1_m)
+    coords.append((p.x, p.y))
+
+    # Evitar geometria degenerada
+    if len(coords) < 2:
+        p0 = traza.interpolate(s0_m)
+        p1 = traza.interpolate(s1_m)
+        coords = [(p0.x, p0.y), (p1.x, p1.y)]
+
+    return LineString(coords)
+
+
+# ---------------------------------------------------------------------
+# EJECUCION
+# ---------------------------------------------------------------------
+
+traza = cargar_traza()
+puntos = cargar_puntos_control()
+anclas = construir_anclas(traza, puntos)
+
+print("\n=== GENERACION DE SEGMENTOS CALIBRADOS ===\n")
+print("Anclas usadas: SOLO confianza alta\n")
+print(f"{'km':>6} {'s_traza':>10} {'dist':>9}")
+print("-" * 29)
+
+for a in anclas:
+    print(f"{a['km']:>6.0f} {a['s_km']:>10.2f} {a['lateral_m']:>7.1f} m")
+
+print("\nPuntos excluidos de la calibracion:\n")
+for r in puntos:
+    if r["confianza"] != "alta":
+        print(
+            f"km {r['progresiva_km']:.0f} | confianza={r['confianza']} | "
+            f"{r.get('observacion','')}"
+        )
+
+km_min = int(math.ceil(anclas[0]["km"]))
+km_max = int(math.floor(anclas[-1]["km"]))
+
+features = []
+rows_csv = []
+
+print("\nSegmentos:\n")
+print(f"{'km':>9} {'longitud':>11} {'factor':>8}")
 print("-" * 32)
-for i, (s, km) in enumerate(cal):
-    f = "" if i == 0 else f"{(s - cal[i-1][0]) / (km - cal[i-1][1]):>9.3f}"
-    print(f"{km:>10.0f} {s:>10.2f} {f}")
-print("-" * 32)
-if descartadas:
-    print(f"\nAnclas descartadas por no monotonia: {descartadas}")
 
+for km0 in range(km_min, km_max):
+    km1 = km0 + 1
 
-def km_a_s(km):
-    """Progresiva senalizada -> distancia recorrida sobre la traza, en km."""
-    if km <= cal[0][1]:
-        return cal[0][0]
-    for (s0, k0), (s1, k1) in zip(cal, cal[1:]):
-        if k0 <= km <= k1:
-            return s0 + (km - k0) * (s1 - s0) / (k1 - k0)
-    (s0, k0), (s1, k1) = cal[-2], cal[-1]
-    return s1 + (km - k1) * (s1 - s0) / (k1 - k0)
+    s0_km = km_a_s(float(km0), anclas)
+    s1_km = km_a_s(float(km1), anclas)
 
+    s0_m = s0_km * 1000.0
+    s1_m = s1_km * 1000.0
 
-km_max = cal[-1][1]
-n = int(km_max // PASO_KM)
-print(f"\nSegmentos a generar: {n} de {PASO_KM:.0f} km, de km 0 a km {n}\n")
+    sub_xy = extraer_sublinea(traza, s0_m, s1_m, MUESTREO_M)
+    longitud_km = sub_xy.length / 1000.0
+    factor = longitud_km / (km1 - km0)
 
-filas, features = [], []
-for i in range(n):
-    km_ini, km_fin = i * PASO_KM, (i + 1) * PASO_KM
-    s_ini, s_fin = km_a_s(km_ini) * 1000, km_a_s(km_fin) * 1000
-    s_ini = max(0, min(s_ini, traza.length))
-    s_fin = max(0, min(s_fin, traza.length))
-    if s_fin <= s_ini:
-        continue
+    sub_ll = LineString([lonlat(x, y) for x, y in sub_xy.coords])
 
-    a, b = traza.interpolate(s_ini), traza.interpolate(s_fin)
-    medio = traza.interpolate((s_ini + s_fin) / 2)
-    lon_a, lat_a = lonlat(a.x, a.y)
-    lon_b, lat_b = lonlat(b.x, b.y)
-    lon_m, lat_m = lonlat(medio.x, medio.y)
+    props = {
+        "km_inicio": km0,
+        "km_fin": km1,
+        "s_inicio_km": round(s0_km, 6),
+        "s_fin_km": round(s1_km, 6),
+        "longitud_traza_km": round(longitud_km, 6),
+        "factor_local": round(factor, 6),
+        "metodo_calibracion": "solo_puntos_confianza_alta",
+    }
 
-    filas.append({
-        "segmento_id": f"S{i:04d}",
-        "km_inicio": f"{km_ini:.0f}",
-        "km_fin": f"{km_fin:.0f}",
-        "lat_centro": f"{lat_m:.6f}",
-        "lon_centro": f"{lon_m:.6f}",
-        "lat_inicio": f"{lat_a:.6f}",
-        "lon_inicio": f"{lon_a:.6f}",
-        "lat_fin": f"{lat_b:.6f}",
-        "lon_fin": f"{lon_b:.6f}",
-        "long_traza_m": f"{s_fin - s_ini:.0f}",
-        "fuente": "openstreetmap+puntos_control",
-    })
-
-    sub = []
-    d = s_ini
-    while d < s_fin:
-        p = traza.interpolate(d)
-        sub.append(list(lonlat(p.x, p.y)))
-        d += 100
-    sub.append([lon_b, lat_b])
     features.append({
         "type": "Feature",
-        "geometry": {"type": "LineString", "coordinates": sub},
-        "properties": {"segmento_id": f"S{i:04d}", "km_inicio": km_ini, "km_fin": km_fin},
+        "geometry": mapping(sub_ll),
+        "properties": props,
     })
 
-OUT_SEG.parent.mkdir(parents=True, exist_ok=True)
-with open(OUT_SEG, "w", newline="", encoding="utf-8") as f:
-    w = csv.DictWriter(f, fieldnames=list(filas[0].keys()))
-    w.writeheader()
-    w.writerows(filas)
+    rows_csv.append(props)
 
-OUT_GEO.write_text(json.dumps(
-    {"type": "FeatureCollection", "features": features}, ensure_ascii=False),
-    encoding="utf-8")
+    # Mostrar solo factores llamativos y tramos de interes
+    if (
+        factor < 0.90
+        or factor > 1.10
+        or 45 <= km0 <= 59
+        or 108 <= km0 <= 116
+    ):
+        print(
+            f"{km0:>4}->{km1:<4} "
+            f"{longitud_km:>8.3f} km "
+            f"{factor:>8.3f}"
+        )
 
-print(f"Segmentos generados: {len(filas)}")
-print(f"  {OUT_SEG}")
-print(f"  {OUT_GEO}\n")
+OUT_GEOJSON.parent.mkdir(parents=True, exist_ok=True)
 
-print("Verificacion: progresiva calibrada de cada cartel\n")
-print(f"{'km cartel':>10} {'km calibrado':>13} {'error m':>9}")
-print("-" * 35)
-err = []
-for r in PC:
-    p = Point(*xy(float(r["lon"]), float(r["lat"])))
-    s = traza.project(p) / 1000
-    lo, hi = 0.0, km_max
-    for _ in range(60):
-        mid = (lo + hi) / 2
-        if km_a_s(mid) < s:
-            lo = mid
-        else:
-            hi = mid
-    kmc = (lo + hi) / 2
-    e = (kmc - float(r["progresiva_km"])) * 1000
-    err.append(abs(e))
-    print(f"{float(r['progresiva_km']):>10.0f} {kmc:>13.3f} {e:>+9.0f}")
-print("-" * 35)
-print(f"\nError medio: {sum(err)/len(err):.0f} m   Error maximo: {max(err):.0f} m")
+with open(OUT_GEOJSON, "w", encoding="utf-8") as f:
+    json.dump({
+        "type": "FeatureCollection",
+        "features": features,
+    }, f, ensure_ascii=False)
+
+with open(OUT_CSV, "w", newline="", encoding="utf-8") as f:
+    writer = csv.DictWriter(
+        f,
+        fieldnames=[
+            "km_inicio",
+            "km_fin",
+            "s_inicio_km",
+            "s_fin_km",
+            "longitud_traza_km",
+            "factor_local",
+            "metodo_calibracion",
+        ],
+    )
+    writer.writeheader()
+    writer.writerows(rows_csv)
+
+print("\nResultado:")
+print(f"Segmentos generados: {len(features)}")
+print(f"Rango: km {km_min} -> {km_max}")
+print(f"\nGuardado:\n{OUT_CSV}\n{OUT_GEOJSON}")

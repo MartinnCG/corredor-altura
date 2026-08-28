@@ -1,28 +1,35 @@
-"""Ensambla la traza continua del corredor a partir de las vias OSM.
+"""Construye la traza del corredor usando la red vial OSM y snap sobre aristas.
 
-No usa grafo ni conectividad topologica: OSM tiene el camino partido en
-tramos que no se tocan. En su lugar construye una poligonal de referencia
-con los puntos de control, filtra las vias cercanas, y ordena sus vertices
-por progresiva sobre esa poligonal.
+Mejoras respecto de la version anterior:
+- Los puntos de control se proyectan sobre el segmento OSM mas cercano,
+  no sobre el vertice OSM mas cercano.
+- Cada punto proyectado se inserta como nodo real del grafo, dividiendo
+  la arista correspondiente.
+- Se preserva la conectividad original de cada LineString OSM.
+- Solo se cierran pequenos gaps entre extremos de vias.
 """
 
-import csv, json, math
+import csv
+import json
+import math
+import heapq
 from pathlib import Path
+from collections import defaultdict
 
-from shapely.geometry import LineString, Point, mapping
+from shapely.geometry import Point, LineString, mapping
 
 RAIZ = Path(__file__).resolve().parents[2]
-GJ = json.load(open(RAIZ / "data" / "raw" / "osm_candidatos.geojson", encoding="utf-8"))
-PC = list(csv.DictReader(open(RAIZ / "data" / "raw" / "puntos_control.csv", encoding="utf-8")))
+OSM_FILE = RAIZ / "data" / "raw" / "osm_candidatos.geojson"
+PC_FILE = RAIZ / "data" / "raw" / "puntos_control.csv"
 SALIDA = RAIZ / "data" / "raw" / "traza_corredor.geojson"
-
-BUFFER_M = 600      # distancia maxima de un vertice a la poligonal de referencia
-COBERTURA_MIN = 0.02 # fraccion de vertices de una via que debe caer dentro del buffer
-BIN_M = 50          # resolucion de muestreo a lo largo del corredor
 
 LAT_REF = -29.1
 MX = 111320 * math.cos(math.radians(LAT_REF))
 MY = 110540
+
+TOLERANCIA_GAP_M = 20.0
+MAX_SNAP_PC_M = 250.0
+ROUND_COORD = 3
 
 
 def xy(lon, lat):
@@ -33,83 +40,291 @@ def lonlat(x, y):
     return x / MX, y / MY
 
 
-# --- 1. poligonal de referencia a partir de los puntos de control -----
-PC.sort(key=lambda r: float(r["progresiva_km"]))
-ref_pts = [xy(float(r["lon"]), float(r["lat"])) for r in PC]
-ref = LineString(ref_pts)
-print(f"Poligonal de referencia: {len(ref_pts)} puntos de control, "
-      f"{ref.length/1000:.1f} km en linea quebrada\n")
+def key(p):
+    return (round(float(p[0]), ROUND_COORD), round(float(p[1]), ROUND_COORD))
 
-# --- 2. filtrar vias cercanas a la referencia ------------------------
-retenidas = []
-for f in GJ["features"]:
-    c = [xy(x, y) for x, y in f["geometry"]["coordinates"]]
-    if len(c) < 2:
-        continue
-    dentro = sum(1 for p in c if ref.distance(Point(p)) < BUFFER_M)
-    if dentro / len(c) >= COBERTURA_MIN:
-        retenidas.append((f["properties"], c))
 
-print(f"Vias OSM totales:    {len(GJ['features'])}")
-print(f"Vias retenidas:      {len(retenidas)}\n")
+def dist(a, b):
+    return math.hypot(a[0] - b[0], a[1] - b[1])
 
-if not retenidas:
-    raise SystemExit("Ninguna via cerca de la referencia. Revisar BUFFER_M.")
 
-# --- 3. proyectar vertices y quedarse con el mejor por bin -----------
-bins = {}
-for props, c in retenidas:
-    for p in c:
-        pt = Point(p)
-        d = ref.distance(pt)
-        if d >= BUFFER_M:
+def add_edge(g, a, b, w=None):
+    a, b = key(a), key(b)
+    if a == b:
+        return
+    if w is None:
+        w = dist(a, b)
+    g[a].append((b, w))
+    g[b].append((a, w))
+
+
+def dijkstra(g, start, end):
+    pq = [(0.0, start)]
+    best = {start: 0.0}
+    prev = {}
+
+    while pq:
+        cost, u = heapq.heappop(pq)
+        if u == end:
+            break
+        if cost != best.get(u):
             continue
-        s = ref.project(pt)
-        k = int(s // BIN_M)
-        if k not in bins or d < bins[k][1]:
-            bins[k] = (p, d, props.get("nombre", ""))
 
-if len(bins) < 2:
-    raise SystemExit("Muy pocos puntos. Revisar parametros.")
+        for v, w in g.get(u, []):
+            nc = cost + w
+            if nc < best.get(v, float("inf")):
+                best[v] = nc
+                prev[v] = u
+                heapq.heappush(pq, (nc, v))
 
-coords_xy = [bins[k][0] for k in sorted(bins)]
-traza_xy = LineString(coords_xy)
-traza_ll = LineString([lonlat(x, y) for x, y in coords_xy])
+    if end not in best:
+        return None, None
 
-huecos = [(a, b) for a, b in zip(sorted(bins), sorted(bins)[1:]) if b - a > 3]
-print(f"Vertices de la traza: {len(coords_xy)}")
-print(f"Longitud ensamblada:  {traza_xy.length/1000:.1f} km")
-if huecos:
-    print(f"Huecos detectados:    {len(huecos)} "
-          f"(el mayor de {max(b-a for a,b in huecos)*BIN_M/1000:.1f} km)")
-print()
+    path = [end]
+    while path[-1] != start:
+        path.append(prev[path[-1]])
+    path.reverse()
+    return path, best[end]
 
-# --- 4. verificacion contra los carteles -----------------------------
-print(f"{'km cartel':>10} {'km calculado':>13} {'error':>9} {'desvio lat':>11}")
-print("-" * 48)
-errores = []
-for r in PC:
+
+# ---------------------------------------------------------------------
+# Cargar datos
+# ---------------------------------------------------------------------
+
+with open(OSM_FILE, encoding="utf-8") as f:
+    gj = json.load(f)
+
+with open(PC_FILE, encoding="utf-8") as f:
+    pcs = list(csv.DictReader(f))
+
+pcs.sort(key=lambda r: float(r["progresiva_km"]))
+
+# Lista de segmentos OSM reales.
+# edge_id = (indice_feature, indice_segmento)
+edges = []
+way_endpoints = set()
+
+for fi, feat in enumerate(gj["features"]):
+    geom = feat.get("geometry", {})
+    if geom.get("type") != "LineString":
+        continue
+
+    coords = geom.get("coordinates", [])
+    if len(coords) < 2:
+        continue
+
+    pts = [key(xy(lon, lat)) for lon, lat in coords]
+    way_endpoints.add(pts[0])
+    way_endpoints.add(pts[-1])
+
+    props = feat.get("properties", {})
+    oid = props.get("osm_id")
+
+    for si, (a, b) in enumerate(zip(pts, pts[1:])):
+        if a == b:
+            continue
+        edges.append({
+            "id": (fi, si),
+            "a": a,
+            "b": b,
+            "line": LineString([a, b]),
+            "osm_id": oid,
+        })
+
+print("\n=== ARMADO DE TRAZA: SNAP SOBRE ARISTAS OSM ===\n")
+print(f"Features OSM: {len(gj['features'])}")
+print(f"Segmentos OSM: {len(edges)}")
+print(f"Puntos de control: {len(pcs)}")
+
+# ---------------------------------------------------------------------
+# Snap de cada PC al segmento OSM mas cercano
+# ---------------------------------------------------------------------
+
+snaps_by_edge = defaultdict(list)
+anchors = []
+
+print("\nSnap de puntos de control sobre aristas:\n")
+print(f"{'km':>6} {'dist':>9} {'osm_id':>12}")
+print("-" * 31)
+
+for idx, r in enumerate(pcs):
+    pxy = xy(float(r["lon"]), float(r["lat"]))
+    pt = Point(pxy)
+
+    best_edge = None
+    best_d = float("inf")
+    best_proj = None
+    best_t = None
+
+    for e in edges:
+        d = e["line"].distance(pt)
+        if d < best_d:
+            s = e["line"].project(pt)
+            proj = e["line"].interpolate(s)
+            length = e["line"].length
+            t = 0.0 if length == 0 else s / length
+
+            best_d = d
+            best_edge = e
+            best_proj = key((proj.x, proj.y))
+            best_t = t
+
+    km = float(r["progresiva_km"])
+
+    if best_d > MAX_SNAP_PC_M:
+        raise SystemExit(
+            f"ERROR: km {km:.0f} esta a {best_d:.1f} m de la red OSM."
+        )
+
+    snap_rec = {
+        "pc_index": idx,
+        "km": km,
+        "node": best_proj,
+        "t": best_t,
+        "distance": best_d,
+        "osm_id": best_edge["osm_id"],
+        "edge_id": best_edge["id"],
+    }
+
+    snaps_by_edge[best_edge["id"]].append(snap_rec)
+    anchors.append(snap_rec)
+
+    print(f"{km:>6.0f} {best_d:>7.1f} m {str(best_edge['osm_id']):>12}")
+
+# ---------------------------------------------------------------------
+# Construir grafo dividiendo las aristas donde caen los PC
+# ---------------------------------------------------------------------
+
+graph = defaultdict(list)
+
+for e in edges:
+    split = [(0.0, e["a"]), (1.0, e["b"])]
+
+    for s in snaps_by_edge.get(e["id"], []):
+        split.append((s["t"], s["node"]))
+
+    # Ordenar y eliminar nodos repetidos consecutivos
+    split.sort(key=lambda x: x[0])
+
+    ordered = []
+    for t, node in split:
+        node = key(node)
+        if not ordered or node != ordered[-1][1]:
+            ordered.append((t, node))
+
+    for (_, a), (_, b) in zip(ordered, ordered[1:]):
+        add_edge(graph, a, b)
+
+# ---------------------------------------------------------------------
+# Cerrar pequenos gaps SOLO entre extremos de ways
+# ---------------------------------------------------------------------
+
+cell = TOLERANCIA_GAP_M
+grid = defaultdict(list)
+
+for p in way_endpoints:
+    grid[(int(p[0] // cell), int(p[1] // cell))].append(p)
+
+gap_pairs = set()
+
+for p in way_endpoints:
+    ix = int(p[0] // cell)
+    iy = int(p[1] // cell)
+
+    candidates = []
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            candidates.extend(grid.get((ix + dx, iy + dy), []))
+
+    nearest = None
+    nearest_d = float("inf")
+
+    for q in candidates:
+        if q == p:
+            continue
+        d = dist(p, q)
+        if 0 < d <= TOLERANCIA_GAP_M and d < nearest_d:
+            nearest = q
+            nearest_d = d
+
+    if nearest is not None:
+        pair = tuple(sorted((p, nearest)))
+        if pair not in gap_pairs:
+            add_edge(graph, p, nearest, nearest_d)
+            gap_pairs.add(pair)
+
+print(f"\nGaps OSM cerrados <= {TOLERANCIA_GAP_M:.0f} m: {len(gap_pairs)}")
+
+# ---------------------------------------------------------------------
+# Rutas entre anclas consecutivas
+# ---------------------------------------------------------------------
+
+coords_total = []
+
+print("\nRutas entre puntos de control:\n")
+
+for a, b in zip(anchors, anchors[1:]):
+    path, length = dijkstra(graph, a["node"], b["node"])
+
+    if path is None:
+        raise SystemExit(
+            f"ERROR: no existe ruta entre km {a['km']:.0f} y km {b['km']:.0f}."
+        )
+
+    factor = length / 1000 / (b["km"] - a["km"])
+
+    print(
+        f"km {a['km']:>5.0f} -> {b['km']:<5.0f} | "
+        f"{length/1000:>7.2f} km | factor {factor:>5.3f} | "
+        f"{len(path):>5} vertices"
+    )
+
+    if coords_total and path[0] == coords_total[-1]:
+        path = path[1:]
+    coords_total.extend(path)
+
+# Limpiar duplicados consecutivos
+clean = []
+for p in coords_total:
+    if not clean or p != clean[-1]:
+        clean.append(p)
+
+if len(clean) < 2:
+    raise SystemExit("ERROR: traza final vacia.")
+
+traza_xy = LineString(clean)
+traza_ll = LineString([lonlat(x, y) for x, y in clean])
+
+print("\nResultado:")
+print(f"Vertices finales: {len(clean)}")
+print(f"Longitud total: {traza_xy.length/1000:.2f} km")
+
+# ---------------------------------------------------------------------
+# Verificacion
+# ---------------------------------------------------------------------
+
+print("\nVerificacion contra puntos GPS:\n")
+print(f"{'km':>6} {'s_traza':>10} {'dist':>9}")
+print("-" * 29)
+
+for r in pcs:
     p = Point(*xy(float(r["lon"]), float(r["lat"])))
-    km_calc = traza_xy.project(p) / 1000
-    km_real = float(r["progresiva_km"])
-    err = km_calc - km_real
-    errores.append(abs(err))
-    print(f"{km_real:>10.0f} {km_calc:>13.2f} {err:>+9.2f} "
-          f"{traza_xy.distance(p):>10.0f} m")
+    km = float(r["progresiva_km"])
+    s = traza_xy.project(p) / 1000
+    lateral = traza_xy.distance(p)
+    print(f"{km:>6.0f} {s:>10.2f} {lateral:>7.1f} m")
 
-print("-" * 48)
-print(f"\nError absoluto medio: {sum(errores)/len(errores):.2f} km")
-print(f"Error maximo:         {max(errores):.2f} km")
-
-# --- 5. guardar ------------------------------------------------------
-SALIDA.write_text(json.dumps({
+salida = {
     "type": "Feature",
     "geometry": mapping(traza_ll),
     "properties": {
-        "fuente": "openstreetmap",
-        "metodo": "proyeccion sobre poligonal de puntos de control",
-        "vertices": len(coords_xy),
-        "longitud_km": round(traza_xy.length / 1000, 2),
+        "fuente": "openstreetmap+puntos_control",
+        "metodo": "shortest_path_osm_snap_sobre_aristas",
+        "tolerancia_gap_m": TOLERANCIA_GAP_M,
+        "vertices": len(clean),
+        "longitud_km": round(traza_xy.length / 1000, 3),
     },
-}, ensure_ascii=False), encoding="utf-8")
-print(f"\nGuardado en {SALIDA}")
+}
+
+SALIDA.write_text(json.dumps(salida, ensure_ascii=False), encoding="utf-8")
+print(f"\nGuardado:\n{SALIDA}")
