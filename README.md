@@ -176,3 +176,25 @@ pluma de polvo. No permite detectar calamina, baches ni rugosidad.
 decenas de kilometros. En cordillera una celda cubre miles de metros de
 desnivel. Se aplica correccion por gradiente termico vertical usando la
 altitud real de cada segmento.
+
+## Validación de traza y segmentación — 28/08/2026
+
+Se reconstruyó la geometría del corredor utilizando conectividad de la red vial OSM entre puntos de control GPS, reemplazando el método anterior basado en selección de vértices por proximidad.
+
+### Resultado
+- Corredor validado visualmente en QGIS sobre Google Satellite: km 0–130.
+- Corregido el zigzag artificial detectado entre km 50–55.
+- Corregida la anomalía geométrica/calibración detectada entre km 110–115.
+- Segmentos de 1 km regenerados sobre la nueva traza.
+- Los puntos de control con confianza alta se utilizan como anclas de calibración.
+- Las referencias operativas km 20 (La Troya) y km 32 (El Zapallar), clasificadas con confianza media, se conservan como referencias pero no intervienen como anclas duras de calibración.
+- El sector inicial presenta diferencias entre distancia física de la traza y progresiva oficial; se conserva la progresiva calibrada sin alterar una geometría que fue validada visualmente.
+
+### Archivos principales
+- data/raw/traza_corredor.geojson
+- data/processed/segmentos.geojson
+- data/processed/segmentos.csv
+- src/segment/armar_traza.py
+- src/segment/generar_segmentos.py
+
+Validación: inspección visual completa en QGIS contra imagen satelital y puntos GPS de campo.
