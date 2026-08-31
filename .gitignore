@@ -1,0 +1,5 @@
+# Datos externos pesados / descargables
+data/external/dem/
+
+# Rasters derivados reproducibles
+data/processed/topografia/*.tif
