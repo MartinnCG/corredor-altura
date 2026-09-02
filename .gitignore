@@ -3,3 +3,6 @@ data/external/dem/
 
 # Rasters derivados reproducibles
 data/processed/topografia/*.tif
+
+# Datos climáticos externos descargables
+data/external/clima/

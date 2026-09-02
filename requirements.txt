@@ -10,3 +10,11 @@ requests>=2.31
 pyyaml>=6.0
 matplotlib>=3.7
 jupyterlab>=4.0
+
+cdsapi>=0.7
+
+netCDF4>=1.6
+zarr>=2.16,<3
+fsspec>=2025.0
+httpio
+xarray>=2025.6
