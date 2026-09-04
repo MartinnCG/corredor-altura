@@ -18,3 +18,5 @@ zarr>=2.16,<3
 fsspec>=2025.0
 httpio
 xarray>=2025.6
+
+scipy>=1.11

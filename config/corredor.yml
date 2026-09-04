@@ -1,6 +1,7 @@
-# Configuracion del corredor de estudio
-# PRINCIPIO: ningun nombre de corredor va hardcodeado en el codigo.
-# Para aplicar el sistema a otro corredor, se crea otro archivo como este.
+# Configuracion del corredor de estudio.
+# Este archivo documenta los parametros generales y fuentes del Caso Corredor Este.
+# Algunos pipelines especializados mantienen parametros tecnicos adicionales
+# dentro de sus respectivos modulos.
 
 corredor:
   id: vicuna_este
@@ -9,56 +10,96 @@ corredor:
   provincia_fin: "San Juan"
   localidad_inicio: "Guandacol"
 
-  # Alcance del estudio
+  # Alcance analitico validado
   progresiva_inicio_km: 0
-  progresiva_fin_km: 140
-  longitud_total_declarada_km: 220
-  fuera_de_alcance:
-    desde_km: 140
-    hasta_km: 220
-    motivo: "Sin acceso verificable. Tramo operado por tercero. Intransitable por nieve en invierno."
+  progresiva_fin_km: 130
 
-  # Segmentacion
+  # Segmentacion operacional
   paso_segmentacion_km: 1
+  numero_segmentos: 130
 
   # Sistema de referencia
   crs_geografico: "EPSG:4326"
-  crs_proyectado: "EPSG:32719"   # UTM 19S - verificar zona antes de usar
+  crs_proyectado: "EPSG:32719"  # UTM 19S
 
-  # Caja de descarga para rasters (lat/lon)
+  # Caja general de trabajo para fuentes raster/climaticas
   bbox:
     lat_min: -29.60
-    lat_max: -28.65
+    lat_max: -28.60
     lon_min: -69.15
     lon_max: -68.50
 
 fuentes:
-  clima:
-    proveedor: open-meteo
-    dataset: era5
-    variables: [temperature_2m, precipitation, snowfall, wind_speed_10m, wind_gusts_10m]
-    desde: "2000-01-01"
-    resolucion_temporal: horaria
-    correccion_altitud:
-      aplicar: true
-      gradiente_termico_c_por_1000m: 6.5
+  referencia_espacial:
+    red_vial: "OpenStreetMap"
+    control: "puntos GPS de campo"
 
   elevacion:
-    proveedor: ign_ar
-    producto: MDE-Ar
+    proveedor: "IGN Argentina"
+    producto: "MDE-Ar v2.1"
     resolucion_m: 30
 
-  satelital:
-    proveedor: copernicus_dataspace
-    coleccion: SENTINEL-2
-    nivel: L2A
-    cobertura_nubes_max_pct: 30
+  clima:
+    proveedor: "Copernicus / ARCO"
+    dataset: "ERA5-Land"
+    desde: "2001-01-01"
+    hasta: "2025-12-31"
+    periodo_completo_anios: 25
+    resolucion_temporal_origen: "horaria"
+
+  hidrologia:
+    fuente_base: "MDE-Ar v2.1"
+    metodo_direccion_flujo: "D8"
+    umbral_drenaje_secundario_celdas: 2500
+    umbral_drenaje_principal_celdas: 10000
+    buffer_segmento_m: 50
+
+  operacional:
+    fuentes:
+      - "IPER camino acceso Proyecto Vicuna"
+      - "relevamiento de campo"
+      - "puntos singulares"
+      - "zonas de falla"
+      - "tramos operativos"
+
+modelo:
+  nombre: "Indice de Exposicion por Segmento"
+  tipo: "indice compuesto de exposicion relativa"
+
+  dimensiones:
+    topografia:
+      peso: 0.333333
+      variables:
+        - pendiente_media_abs_pct
+        - pendiente_terreno_p90_pct
+
+    hidrologia:
+      peso: 0.333333
+      variables:
+        - n_drenajes_principales_50m
+        - area_aportante_max_50m_km2
+
+    clima:
+      peso: 0.333333
+      variables:
+        - precipitacion_diaria_p95_mm
+        - viento_p95_ms
+        - fraccion_horas_nieve_ge50pct
+
+  clasificacion:
+    metodo: "quintiles"
+    clases:
+      - "Muy baja"
+      - "Baja"
+      - "Media"
+      - "Alta"
+      - "Muy alta"
 
 validacion:
-  eventos_observados:
-    - fecha: "2026-08-15"
-      tipo: nieve
-      km_desde: 110
-      km_hasta: 140
-      evidencia: fotografia_georreferenciada
-      observacion: "Camino despejado con maquinaria. Km 140-200 intransitable."
+  principio: "evidencia operacional independiente del calculo del indice"
+
+limitaciones:
+  - "El indice representa exposicion relativa, no riesgo absoluto."
+  - "El modelo no predice fallas, accidentes ni cierres."
+  - "El alcance espacial analitico validado finaliza en km 130."
+  - "El sector posterior a km 130 no se incorpora por falta de continuidad cartografica y ancla de campo de alta confianza suficientes."
