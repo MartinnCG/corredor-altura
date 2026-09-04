@@ -1,200 +1,276 @@
 # Corredor de Altura
 
-Modelo de indicadores de riesgo por tramo para corredores viales mineros.
+Modelo geoespacial de **exposición relativa por segmento** aplicado al Corredor Este de acceso al Proyecto Vicuña, entre La Rioja y San Juan, Argentina.
 
-Caso de aplicacion: corredor de acceso este al Proyecto Vicuna, entrada por
-Garita Guandacol, La Rioja, Argentina. Km 0 a 140.
-
----
-
-## Principio de arquitectura
-
-**Construir generico, aplicar particular.**
-
-Ningun nombre de corredor, coordenada o umbral va escrito en el codigo.
-Todo entra por `config/corredor.yml`. Para aplicar el sistema a otro
-corredor se escribe otro archivo de configuracion, no se toca el codigo.
-
-Si una funcion necesita saber que el corredor se llama Vicuna, esa funcion
-esta mal escrita.
+**Cobertura analítica validada:** km 0-130
+**Unidad de análisis:** 130 segmentos operacionales de 1 km
+**Estado:** pipeline analítico v1 completado
 
 ---
 
-## Estructura
+## Objetivo
 
-```
-corredor-altura/
-├── config/
-│   └── corredor.yml          Definicion del corredor. Unico lugar con datos particulares.
-├── data/
-│   ├── raw/                  Datos crudos. NUNCA se modifican a mano despues de cargados.
-│   ├── interim/              Intermedios del procesamiento. Descartables y regenerables.
-│   └── processed/            Tablas finales listas para analisis.
-├── notebooks/                Exploracion. No contienen logica de produccion.
-├── src/
-│   ├── ingest/               Conectores a fuentes. Un modulo por fuente.
-│   ├── segment/              Segmentacion y referenciacion lineal.
-│   ├── features/             Construccion de variables derivadas.
-│   └── indicators/           Calculo del indice de riesgo.
-├── docs/
-│   └── diccionario_datos.md  Definicion de cada tabla y campo.
-└── outputs/                  Entregables: tablero, figuras, informe.
-```
+Construir una representación cuantitativa, reproducible y trazable del corredor que permita caracterizar las condiciones topográficas, hidrológicas y climáticas asociadas a cada segmento de 1 km.
 
-### Reglas de las carpetas de datos
+El producto analítico principal es un **Índice de Exposición por Segmento**, diseñado para comparar la exposición relativa entre sectores del mismo corredor.
 
-- `raw/` es de solo lectura una vez cargado. Un dato mal cargado se corrige
-  en el archivo original y se vuelve a cargar, nunca se edita en el medio.
-- `interim/` se puede borrar entero y regenerar corriendo el pipeline.
-- `processed/` es lo unico que consumen los notebooks y el tablero.
+El índice **no representa riesgo absoluto** y no predice fallas, accidentes, cierres ni necesidad de mantenimiento.
 
 ---
 
-## Convenciones
+## Arquitectura analítica
 
-**Nombres de archivo y columna:** minusculas, sin tildes, separados por guion bajo.
+El proyecto sigue una secuencia reproducible:
 
-**Progresivas:** siempre en kilometros desde el km 0 del corredor, campo
-`progresiva_km`. Es la clave que une todo el sistema.
+**Fuentes -> Referenciación espacial -> Segmentación -> Variables -> Dataset maestro -> Índice -> Validación -> Producto GIS**
 
-**Trazabilidad:** toda tabla lleva columna `fuente`. Sin fuente declarada,
-el dato no entra al pipeline.
-
-**Idioma:** codigo y nombres de campo en espanol sin tildes. Docstrings en
-ingles cuando el modulo sea reutilizable.
+La progresiva operacional constituye la referencia común que permite integrar información proveniente de distintas fuentes sobre los mismos 130 segmentos.
 
 ---
 
-## Estado de los datos
+## 1. Referencia espacial y segmentación
 
-### Cargado
+La traza fue reconstruida utilizando conectividad de la red vial de OpenStreetMap y puntos GPS de control obtenidos en campo.
 
-| Archivo | Contenido | Cobertura |
+Los puntos de control se proyectan sobre las aristas de la red y los puntos clasificados con **confianza alta** funcionan como anclas de calibración de la progresiva.
+
+Resultado:
+
+- corredor validado visualmente en QGIS sobre imagen satelital;
+- cobertura analítica km 0-130;
+- 130 segmentos de 1 km;
+- corrección de anomalías geométricas detectadas durante la validación;
+- referencias de confianza media conservadas como información operacional, pero excluidas como anclas duras de calibración.
+
+El sector posterior al km 130 queda fuera de la base analítica v1 por no disponer de continuidad cartográfica y ancla de campo de alta confianza suficientes.
+
+---
+
+## 2. Fuentes de información
+
+| Componente | Fuente | Aplicación |
 |---|---|---|
-| `puntos_control.csv` | 8 pares progresiva-coordenada | km 0, 20, 25, 32, 35, 110, 115, 130 |
-| `elevaciones_referencia.csv` | 5 elevaciones medidas | km 110 a 130 |
-| `tramos_operativos.csv` | Nomenclatura de tramos | km 0 a 40 |
-| `zonas_falla.csv` | Modos de falla dominantes | km 0 a 40, mas evento de nieve km 110-140 |
-| `puntos_singulares.csv` | 12 elementos fijos | Parcial, varios sin coordenada |
-| `velocidades_senalizadas.csv` | 3 registros | Parcial |
-
-### Pendiente
-
-- Traza continua del corredor (a digitalizar sobre imagen satelital)
-- Modos de falla y nomenclatura km 40 a 140
-- Coordenadas de cruces de rio y cargaderos del tramo bajo
-- Velocidades senalizadas por tramo
-- Fechas y duracion de cortes historicos
-
-### Fuera de alcance declarado
-
-Km 140 a 220: sin acceso verificable, tramo operado por un tercero,
-intransitable por nieve en invierno. Se declara como limitacion del estudio.
+| Red vial | OpenStreetMap | Reconstrucción de la traza |
+| Control espacial | GPS de campo | Calibración y validación |
+| Elevación | IGN Argentina - MDE-Ar v2.1 | Altitud y variables topográficas |
+| Hidrología | MDE-Ar v2.1 | Dirección, acumulación y red de drenaje |
+| Clima | ERA5-Land / Copernicus ARCO | Climatología histórica |
+| Evidencia operacional | IPER y relevamiento de campo | Validación independiente |
+| Contexto | Documentación pública del Proyecto Vicuña | Contextualización del caso |
 
 ---
 
-## Hallazgos preliminares
+## 3. Topografía
 
-**1. La segmentacion operativa no coincide con la de falla.**
-Los tramos nombrados por el personal cortan en km 20, 26 y 32. Las zonas de
-falla cortan en km 20, 25 y 35. Esa discordancia significa que el nombre
-operativo no predice el riesgo, lo que justifica el trabajo.
+Se utilizó el **MDE-Ar v2.1 de IGN Argentina**, con resolución aproximada de 30 m.
 
-**2. El perfil altimetrico no es monotono.**
-El Paso del Leoncito (3.985 m, ~km 115) es un maximo local. El camino
-desciende despues hacia Salinas del Leoncito (3.655 m, ~km 125). La
-elevacion absoluta por si sola no explica la acumulacion de nieve; la forma
-del terreno y la exposicion tambien intervienen.
+A partir del DEM se derivaron variables de elevación, pendiente longitudinal y pendiente del terreno alrededor de cada segmento.
 
-**3. Existe un evento de validacion documentado.**
-Fotografia georreferenciada del 15/08/2026 entre km 110 y 130 con nieve y
-despeje mecanico. Permite contrastar el modelo contra una condicion real
-con fecha y ubicacion exactas.
+La elevación del DEM fue contrastada contra referencias independientes:
+
+- MAE: 2.88 m
+- RMSE: 3.53 m
+- sesgo medio: -0.58 m
+- error absoluto máximo: 7.64 m
+
+Los resultados no justificaron aplicar una corrección vertical adicional.
 
 ---
 
-## Orden de trabajo
+## 4. Hidrología
 
-**Etapa 1 - Definicion y relevamiento**
-1. Digitalizar la traza del corredor sobre imagen satelital, usando
-   `puntos_control.csv` como control.
-2. Verificar que las progresivas calculadas sobre la traza coincidan con las
-   de los carteles. Tolerancia aceptable a definir y documentar.
-3. Generar la tabla maestra de segmentos de 1 km.
+El análisis hidrológico utiliza el DEM reproyectado a **EPSG:32719 (UTM 19S)**.
 
-**Etapa 2 - Construccion de la base**
-4. Descargar el modelo digital de elevaciones para la caja definida en config.
-5. Muestrear altitud, pendiente, exposicion y acumulacion de flujo por segmento.
-6. Ingestar series climaticas y aplicar correccion por gradiente termico.
-7. Procesar escenas satelitales.
-8. Consolidar el modelo de datos unificado.
+Pipeline:
 
-**Etapa 3 - Modelado**
-9. Construir variables derivadas.
-10. Definir y calcular el indice de riesgo por segmento.
-11. Validar contra zonas de falla declaradas, velocidades senalizadas y el
-    evento de nieve documentado.
+1. acondicionamiento del DEM;
+2. resolución de depresiones y zonas planas;
+3. dirección de flujo D8;
+4. acumulación de flujo;
+5. extracción de redes de drenaje;
+6. resumen de exposición por segmento.
 
-**Etapa 4 - Producto**
-12. Tablero, documentacion, informe y videopresentacion.
+Umbrales utilizados:
+
+- drenaje secundario: >= 2500 celdas;
+- drenaje principal: >= 10000 celdas;
+- buffer de análisis alrededor del segmento: 50 m.
 
 ---
 
-## Stack
+## 5. Clima
+
+La climatología se construyó con **ERA5-Land mediante Copernicus ARCO**.
+
+Periodo analizado:
+
+**01/01/2001 - 31/12/2025**
+
+Esto proporciona 25 años completos de información climática horaria.
+
+La información fue procesada a nivel de celda y posteriormente asignada a los segmentos del corredor.
+
+Resultado:
+
+- 77 celdas climáticas procesadas;
+- 12 variables climáticas derivadas;
+- 130 segmentos con cobertura;
+- 0 valores faltantes.
+
+---
+
+## 6. Dataset analítico maestro
+
+Las distintas familias de variables se consolidan en:
+
+`data/processed/features_segmentos_master.csv`
+
+Dimensiones:
+
+- 130 filas;
+- 46 columnas;
+- 44 variables numéricas;
+- 0 valores faltantes.
+
+Este dataset constituye la base reproducible utilizada para construir el índice de exposición.
+
+---
+
+## 7. Índice de Exposición por Segmento
+
+El modelo v1 utiliza siete variables organizadas en tres dimensiones.
+
+### Topografía
+
+- `pendiente_media_abs_pct`
+- `pendiente_terreno_p90_pct`
+
+### Hidrología
+
+- `n_drenajes_principales_50m`
+- `area_aportante_max_50m_km2`
+
+Para el área aportante se aplica transformación `log1p` antes de la normalización para reducir la influencia de valores extremos.
+
+### Clima
+
+- `precipitacion_diaria_p95_mm`
+- `viento_p95_ms`
+- `fraccion_horas_nieve_ge50pct`
+
+Las variables son normalizadas y combinadas en subíndices. Cada dimensión recibe el mismo peso: **Topografía 1/3, Hidrología 1/3 y Clima 1/3**.
+
+El índice final se expresa en una escala relativa. Los 130 segmentos se clasifican mediante quintiles en: Muy baja, Baja, Media, Alta y Muy alta.
+
+Estas clases describen **exposición relativa dentro del corredor estudiado** y no categorías universales de riesgo.
+
+---
+
+## 8. Validación
+
+La validación utiliza evidencia operacional estructurada de manera independiente del cálculo del índice.
+
+Archivo: `data/processed/validacion_indice_exposicion.csv`
+
+La evidencia incluye información proveniente del IPER del camino y del relevamiento de campo. El objetivo es evaluar **coherencia e interpretabilidad** entre el patrón cuantitativo de exposición y las condiciones operacionales documentadas.
+
+La validación no constituye prueba causal ni demuestra capacidad predictiva sobre fallas o accidentes.
+
+---
+
+## 9. Productos principales
+
+### Datos
+
+- `data/processed/segmentos.csv`
+- `data/processed/segmentos.geojson`
+- `data/processed/features_segmentos_master.csv`
+- `data/processed/indice_exposicion_segmentos.csv`
+- `data/processed/segmentos_indice_exposicion.geojson`
+- `data/processed/validacion_indice_exposicion.csv`
+
+### Productos visuales
+
+- `outputs/figuras/perfil_longitudinal_indice_exposicion.png`
+- `outputs/figuras/mapa_indice_exposicion.qgz`
+- `outputs/mapa_indice_exposicion_corredor_0_130.pdf`
+
+---
+
+## 10. Estructura del repositorio
+
+- `config/`: configuración general del caso de estudio.
+- `data/raw/`: datos originales y evidencia de entrada.
+- `data/interim/`: productos intermedios regenerables.
+- `data/external/`: fuentes externas pesadas no versionadas.
+- `data/processed/`: datasets analíticos y capas finales.
+- `src/ingest/`: adquisición de fuentes.
+- `src/segment/`: construcción de traza y segmentación.
+- `src/features/`: ingeniería de variables, índice y validación.
+- `docs/`: documentación técnica y académica.
+- `outputs/`: mapas, figuras y entregables.
+
+## 11. Trazabilidad y reproducibilidad
+
+La lógica analítica se mantiene en scripts versionados dentro de `src/`. El pipeline incluye reconstrucción de traza, segmentación, procesamiento y validación del DEM, topografía, hidrología, climatología ERA5-Land, consolidación del dataset maestro, cálculo del índice, validación operacional y generación de productos espaciales.
+
+`config/corredor.yml` documenta el alcance, las fuentes y los parámetros generales del caso de estudio. Git registra la evolución metodológica y los principales hitos del pipeline.
+
+Los rásteres derivados y fuentes externas pesadas pueden regenerarse mediante los scripts correspondientes y no necesitan mantenerse bajo control de versiones.
+
+---
+
+## 12. Stack
 
 - Python 3.11+
-- Geoespacial: `geopandas`, `shapely`, `rasterio`, `rioxarray`, `pyproj`, `pysheds`
-- Datos: `pandas`, `numpy`
-- Configuracion: `pyyaml`
-- SIG de escritorio: QGIS
-- Base de datos: PostgreSQL con PostGIS
-
-Todo software libre. Costo de licencias: cero.
-
----
-
-## Fuentes
-
-| Fuente | Uso | Acceso |
-|---|---|---|
-| Open-Meteo / ERA5 | Clima historico | Gratuito, sin clave |
-| IGN Argentina | Modelo de elevaciones, capas SIG | Gratuito |
-| Copernicus Data Space | Imagenes Sentinel-2 | Gratuito, con registro |
-| NI 43-101 Vicuna (Lundin Mining, 16/02/2026) | Contexto del corredor | Publico |
-| Relevamiento de campo | Nomenclatura, modos de falla, puntos singulares | Informante directo |
+- pandas y numpy
+- scipy
+- geopandas y shapely
+- rasterio y rioxarray
+- pyproj
+- pysheds
+- xarray y zarr
+- QGIS
+- Git
 
 ---
 
-## Limitaciones reconocidas
+## 13. Limitaciones
 
-**Con fuentes publicas se modela exposicion al riesgo, no se mide estado del
-camino.** Sentinel-2 tiene 10 m de resolucion y un camino de ripio tiene
-entre 8 y 12 m de ancho: un pixel. Permite detectar traza, nieve, humedad y
-pluma de polvo. No permite detectar calamina, baches ni rugosidad.
+- El índice representa **exposición relativa**, no riesgo absoluto.
+- No existe una variable objetivo suficiente para entrenar o validar un modelo predictivo de fallas.
+- El índice no estima probabilidad de accidente, cierre o deterioro.
+- ERA5-Land posee una resolución espacial más gruesa que la unidad de análisis de 1 km.
+- La resolución del DEM limita el detalle de procesos topográficos e hidrológicos locales.
+- La evidencia operacional disponible no posee cobertura homogénea en todo el corredor.
+- La cobertura analítica validada termina en km 130.
+- El sector posterior al km 130 requiere nueva evidencia espacial y de campo antes de incorporarse al modelo.
 
-**La resolucion climatica es gruesa.** El reanalisis global tiene celdas de
-decenas de kilometros. En cordillera una celda cubre miles de metros de
-desnivel. Se aplica correccion por gradiente termico vertical usando la
-altitud real de cada segmento.
+---
 
-## Validación de traza y segmentación — 28/08/2026
+## 14. Estado del proyecto
 
-Se reconstruyó la geometría del corredor utilizando conectividad de la red vial OSM entre puntos de control GPS, reemplazando el método anterior basado en selección de vértices por proximidad.
+| Componente | Estado |
+|---|---|
+| Construcción y validación de traza | Completado |
+| Segmentación km 0-130 | Completado |
+| Variables topográficas | Completado |
+| Variables hidrológicas | Completado |
+| Variables climáticas | Completado |
+| Dataset maestro | Completado |
+| Índice de exposición v1 | Completado |
+| Validación operacional v1 | Completado |
+| Capa GIS del índice | Completado |
+| Mapa cartográfico | Completado |
+| Documentación y reproducibilidad | En cierre |
+| Dashboard interactivo | Pendiente |
 
-### Resultado
-- Corredor validado visualmente en QGIS sobre Google Satellite: km 0–130.
-- Corregido el zigzag artificial detectado entre km 50–55.
-- Corregida la anomalía geométrica/calibración detectada entre km 110–115.
-- Segmentos de 1 km regenerados sobre la nueva traza.
-- Los puntos de control con confianza alta se utilizan como anclas de calibración.
-- Las referencias operativas km 20 (La Troya) y km 32 (El Zapallar), clasificadas con confianza media, se conservan como referencias pero no intervienen como anclas duras de calibración.
-- El sector inicial presenta diferencias entre distancia física de la traza y progresiva oficial; se conserva la progresiva calibrada sin alterar una geometría que fue validada visualmente.
+---
 
-### Archivos principales
-- data/raw/traza_corredor.geojson
-- data/processed/segmentos.geojson
-- data/processed/segmentos.csv
-- src/segment/armar_traza.py
-- src/segment/generar_segmentos.py
+## Próxima etapa
 
-Validación: inspección visual completa en QGIS contra imagen satelital y puntos GPS de campo.
+La siguiente etapa funcional consiste en construir un **dashboard interactivo mínimo** sobre los productos analíticos existentes.
+
+El dashboard no recalculará el modelo. Consumirá los resultados versionados para explorar el índice y clase de exposición por segmento, los subíndices de topografía, hidrología y clima, el perfil longitudinal, la ubicación espacial y las variables que explican la exposición observada.
+
+El objetivo es transformar el pipeline analítico validado en un producto de consulta reproducible, interpretable y presentable.
