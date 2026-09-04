@@ -6,3 +6,6 @@ data/processed/topografia/*.tif
 
 # Datos climáticos externos descargables
 data/external/clima/
+
+__pycache__/
+*.py[cod]
