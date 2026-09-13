@@ -262,15 +262,40 @@ Los rásteres derivados y fuentes externas pesadas pueden regenerarse mediante l
 | Validación operacional v1 | Completado |
 | Capa GIS del índice | Completado |
 | Mapa cartográfico | Completado |
-| Documentación y reproducibilidad | En cierre |
-| Dashboard interactivo | Pendiente |
+| Documentación y reproducibilidad | En hardening para release v1.0 |
+| Dashboard interactivo | Completado |
+
+---
+
+## Control de calidad
+
+Los contratos publicados de los cuatro datasets canónicos se validan con:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+GitHub Actions ejecuta estas comprobaciones en cada pull request y push a
+`master`. Los criterios, límites y revisiones manuales previas al tag
+`v1.0` están documentados en
+[`docs/analytical_v1_release_audit.md`](docs/analytical_v1_release_audit.md).
+
+Estas pruebas demuestran consistencia interna de los artefactos versionados. No
+demuestran exactitud de las fuentes, causalidad, seguridad operacional ni
+capacidad predictiva.
 
 ---
 
 ## Próxima etapa
 
-La siguiente etapa funcional consiste en construir un **dashboard interactivo mínimo** sobre los productos analíticos existentes.
+El dashboard interactivo mínimo ya está implementado y consume los resultados
+versionados sin recalcular el modelo.
 
-El dashboard no recalculará el modelo. Consumirá los resultados versionados para explorar el índice y clase de exposición por segmento, los subíndices de topografía, hidrología y clima, el perfil longitudinal, la ubicación espacial y las variables que explican la exposición observada.
+El siguiente hito es cerrar el hardening de la versión analítica `v1.0`:
+ejecutar los controles automatizados, completar la revisión manual de
+proveniencia y sensibilidad de los datos y verificar la reproducción del
+pipeline en un entorno limpio.
 
-El objetivo es transformar el pipeline analítico validado en un producto de consulta reproducible, interpretable y presentable.
+La V2 comenzará después de congelar `v1.0`, con una auditoría de arquitectura
+orientada a contratos de datos, orquestación, versionado de datasets,
+QA/observabilidad y despliegue repetible.
