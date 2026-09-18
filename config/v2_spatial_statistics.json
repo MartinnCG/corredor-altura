@@ -1,0 +1,27 @@
+{
+  "schema_version": "v0.1",
+  "analysis_id": "demo_delta_spatial_statistics_v1",
+  "simulation_only": true,
+  "operational_use_allowed": false,
+  "metric_name": "demo_surface_condition_index",
+  "value_field": "delta_abs",
+  "weights": {
+    "id": "segment_neighbors_v0.1",
+    "primary_transformation": "r",
+    "sensitivity_transformation": "b"
+  },
+  "inference": {
+    "permutations": 9999,
+    "alpha": 0.05,
+    "multiple_testing": "fdr_bh",
+    "seeds": {
+      "primary_global": 31001,
+      "sensitivity_global": 31002,
+      "primary_local": 31003
+    }
+  },
+  "provenance": {
+    "fuente": "simulation:pysal_spatial_statistics_demo",
+    "notes": "SIMULATED DEMO - NOT OPERATIONAL EVIDENCE"
+  }
+}
