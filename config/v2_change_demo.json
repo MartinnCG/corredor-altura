@@ -1,0 +1,55 @@
+{
+  "schema_version": "v0.1",
+  "scenario_id": "demo_change_control_v1",
+  "simulation_only": true,
+  "operational_use_allowed": false,
+  "metric": {
+    "name": "demo_surface_condition_index",
+    "unit": "simulated_index_0_100",
+    "higher_is_better": true
+  },
+  "timestamps": {
+    "baseline_at_utc": "2026-01-01T00:00:00Z",
+    "current_at_utc": "2026-02-01T00:00:00Z",
+    "ingested_at_utc": "2026-02-02T00:00:00Z"
+  },
+  "baseline_formula": {
+    "intercept": 70.0,
+    "multiplier": 17,
+    "modulus": 21,
+    "center": 10,
+    "scale": 0.5
+  },
+  "default_delta_pattern": [-2.0, -1.0, 0.0, 1.0, 2.0],
+  "demonstration_zones": [
+    {
+      "km_inicio_min": 20,
+      "km_inicio_max": 29,
+      "delta": -12.0
+    },
+    {
+      "km_inicio_min": 70,
+      "km_inicio_max": 74,
+      "delta": 8.0
+    },
+    {
+      "km_inicio_min": 100,
+      "km_inicio_max": 109,
+      "delta": -6.0
+    }
+  ],
+  "uncertainty_half_width": {
+    "baseline": 2.0,
+    "current": 3.0
+  },
+  "change_thresholds_abs": {
+    "stable_max": 2.0,
+    "minor_max": 5.0,
+    "moderate_max": 10.0
+  },
+  "provenance": {
+    "fuente": "simulation:deterministic_change_control_demo",
+    "quality_flag": "simulated_demo_only",
+    "notes": "SIMULATED DEMO - NOT OPERATIONAL EVIDENCE"
+  }
+}
