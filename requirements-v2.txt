@@ -1,0 +1,5 @@
+# Entorno analitico V2 separado. Requiere Python >= 3.12.
+# No actualizar estas versiones sin regenerar y revisar los productos espaciales.
+-r requirements.txt
+esda==2.10.0
+libpysal==4.15.0
