@@ -1,10 +1,13 @@
 # Corredor de Altura
 
+Proyecto académico y de portfolio desarrollado como práctica profesional de Ciencia de Datos.
+
 Modelo geoespacial de **exposición relativa por segmento** aplicado al Corredor Este de acceso al Proyecto Vicuña, entre La Rioja y San Juan, Argentina.
 
 **Cobertura analítica validada:** km 0-130
 **Unidad de análisis:** 130 segmentos operacionales de 1 km
-**Estado:** pipeline analítico v1 completado
+**Estado:** pipeline analítico v1 completado  
+**Alcance:** análisis reproducible; no constituye ingeniería vial, geotécnica ni una evaluación oficial de riesgo
 
 ---
 
