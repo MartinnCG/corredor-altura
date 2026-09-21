@@ -1,0 +1,57 @@
+{
+  "analysis_id": "demo_delta_spatial_statistics_v1",
+  "fuente": "simulation:pysal_spatial_statistics_demo",
+  "local_inference": {
+    "alpha": 0.05,
+    "alternative": "two-sided",
+    "cluster_counts_fdr": {
+      "HH": 0,
+      "HL": 0,
+      "LH": 0,
+      "LL": 0,
+      "not_significant": 130
+    },
+    "multiple_testing": "fdr_bh",
+    "permutations": 9999,
+    "seed": 31003,
+    "significant_fdr": 0,
+    "significant_raw": 13
+  },
+  "metric_name": "demo_surface_condition_index",
+  "n_segments": 130,
+  "notes": "SIMULATED DEMO - NOT OPERATIONAL EVIDENCE",
+  "operational_use_allowed": false,
+  "primary": {
+    "geary_c": 0.1978485704,
+    "geary_expected": 1.0,
+    "geary_p_sim": 0.0001,
+    "moran_expected": -0.007751938,
+    "moran_i": 0.7999294035,
+    "moran_p_sim": 0.0001,
+    "permutations": 9999,
+    "seed": 31001,
+    "transformation": "r"
+  },
+  "schema_version": "v0.1",
+  "sensitivity": {
+    "geary_c": 0.1991528415,
+    "geary_expected": 1.0,
+    "geary_p_sim": 0.0001,
+    "moran_expected": -0.007751938,
+    "moran_i": 0.8046692224,
+    "moran_p_sim": 0.0001,
+    "permutations": 9999,
+    "seed": 31002,
+    "transformation": "b"
+  },
+  "simulation_only": true,
+  "simulation_scenario_id": "demo_change_control_v1",
+  "software": {
+    "esda": "2.10.0",
+    "libpysal": "4.15.0",
+    "numpy": "2.5.3",
+    "scipy": "1.18.1"
+  },
+  "value_field": "delta_abs",
+  "weights_id": "segment_neighbors_v0.1"
+}
